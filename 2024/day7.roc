@@ -67,6 +67,7 @@ getInput = \year, day ->
 
     padded = (leftPad (Num.toStr day) "0" 2) |> Result.withDefault ""
     filename = Str.joinWith ["input", padded, ".txt"] ""
+    #filename = Str.joinWith ["testInput", padded, ".txt"] ""
     inputPath = Str.joinWith [executableFolder, "inputs"] "/"
     filePath = Str.joinWith [inputPath, filename] "/"
 
@@ -109,6 +110,10 @@ listToTuple = \list ->
         (Ok a, Ok b) -> Ok (a, b)
         _ -> Err InvalidListSize
 
+concat := I64, I64 -> I64
+concat = \a, b ->
+    Str.toI64 (Str.concat (Num.toStr a) (Num.toStr b)) |> Result.withDefault 0
+
 calculationWorks := (I64, List I64) -> Bool
 calculationWorks = \calculationParameters ->
     when calculationParameters.1 is
@@ -122,6 +127,20 @@ calculationWorks = \calculationParameters ->
             else
                 Bool.false
 
+calculationWorksWithConcatenation := (I64, List I64) -> Bool
+calculationWorksWithConcatenation = \calculationParameters ->
+    when calculationParameters.1 is
+        [] -> Bool.false
+        [a] -> calculationParameters.0 == a
+        [a, b, .. as remainder] -> 
+            if calculationWorksWithConcatenation (calculationParameters.0, List.prepend remainder (a + b)) then
+                Bool.true
+            else if calculationWorksWithConcatenation (calculationParameters.0, List.prepend remainder (a * b)) then
+                Bool.true
+            else if calculationWorksWithConcatenation (calculationParameters.0, List.prepend remainder (concat a  b)) then
+                Bool.true
+            else
+                Bool.false
 main =
     year = 2024
     day = 7
@@ -165,5 +184,18 @@ part1 = \input ->
 
 part2 : Str -> Result Str _
 part2 = \input -> 
-    Ok ""
+    parsed = input
+        |> Str.trim
+        |> Str.split "\n"
+        |> List.map \line -> Str.split line ":" |> listToTuple
+        |> List.keepOks \x -> x
+        |> List.map \calculation -> (calculation.0 |> Str.toI64 |> Result.withDefault 0, calculation.1 |> Str.trim |> Str.split " " |> List.map \x -> Str.toI64 x |> Result.withDefault 0)
+
+    result = parsed
+        |> List.keepIf \x -> 
+            calculationWorksWithConcatenation x
+        |> List.map \calculation -> calculation.0
+        |> List.sum
+
+    Ok (Num.toStr result)
 
