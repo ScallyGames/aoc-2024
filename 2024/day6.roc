@@ -133,7 +133,7 @@ main =
             Err _ -> Stdout.line "Something went wrong in part 2"
     part2Task!
 
-resultsInALoop := Array2D Bool, Index2D, (I64, I64), List (Index2D, (I64, I64)) -> Bool
+resultsInALoop := Array2D [Obstacle, Empty], Index2D, (I64, I64), List (Index2D, (I64, I64)) -> Bool
 resultsInALoop = \map, currentPosition, currentDirection, visited ->
     paramState = (currentPosition, currentDirection)
     if List.contains visited paramState then
@@ -149,7 +149,7 @@ resultsInALoop = \map, currentPosition, currentDirection, visited ->
             (nextPosition, nextDirection) = 
                 if !(Array2D.hasIndex map nextPositionCandidate) then
                     (nextPositionCandidate, currentDirection)
-                else if Array2D.get map nextPositionCandidate |> Result.withDefault Bool.true then
+                else if Array2D.get map nextPositionCandidate == Ok Obstacle then
                     (currentPosition, (rotateRightMath currentDirection))
                 else
                     (nextPositionCandidate, currentDirection)
@@ -160,7 +160,7 @@ resultsInALoop = \map, currentPosition, currentDirection, visited ->
                     (List.append visited paramState)
             resultsInALoop map nextPosition nextDirection newVisited
 
-walkPath := Array2D Bool, Index2D, (I64, I64) -> Array2D Bool
+walkPath := Array2D [Obstacle, Empty], Index2D, (I64, I64) -> Array2D Bool
 walkPath = \map, currentPosition, currentDirection ->
     if !(Array2D.hasIndex map currentPosition) then
         Array2D.repeat Bool.false (Array2D.shape map)
@@ -172,7 +172,7 @@ walkPath = \map, currentPosition, currentDirection ->
         (nextPosition, nextDirection) = 
             if !(Array2D.hasIndex map nextPositionCandidate) then
                 (nextPositionCandidate, currentDirection)
-            else if Array2D.get map nextPositionCandidate |> Result.withDefault Bool.true then
+            else if Array2D.get map nextPositionCandidate == Ok Obstacle then
                 (currentPosition, (rotateRightMath currentDirection))
             else
                 (nextPositionCandidate, currentDirection)
@@ -237,7 +237,7 @@ part1 = \input ->
         |> List.map \x -> Str.toUtf8 x
         |> Array2D.fromLists (FitLongest 0)
 
-    map = characterMap |> Array2D.map \x -> x == obstacleSign
+    map = characterMap |> Array2D.map \x -> if x == obstacleSign then Obstacle else Empty
 
     startPositionMatch = characterMap |> Array2D.findFirstIndex \x -> x == startSign
     when startPositionMatch is
@@ -259,20 +259,20 @@ part2 = \input ->
         |> List.map \x -> Str.toUtf8 x
         |> Array2D.fromLists (FitLongest 0)
 
-    map = characterMap |> Array2D.map \x -> x == obstacleSign
+    map = characterMap |> Array2D.map \x -> if x == obstacleSign then Obstacle else Empty
 
     startPositionMatch = characterMap |> Array2D.findFirstIndex \x -> x == startSign
     when startPositionMatch is
         Ok startPosition ->
 
             possibleNewObstaclePositions =  map |> Array2D.mapWithIndex \value, index ->
-                dbg index
+                # dbg index
                 if index == startPosition then
                     Bool.false
-                else if value == Bool.true then  
+                else if value == Obstacle then  
                     Bool.false
                 else
-                    resultsInALoop (Array2D.set map index Bool.true) startPosition (0, -1) []
+                    resultsInALoop (Array2D.set map index Obstacle) startPosition (0, -1) []
 
             numberOfObstacleOptions = possibleNewObstaclePositions |> Array2D.countIf \x -> x
 
