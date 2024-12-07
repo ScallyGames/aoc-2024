@@ -1,0 +1,94 @@
+// Part 1
+
+directions = [
+    ( 1,  0),
+    (-1,  0),
+    ( 0,  1),
+    ( 0, -1),
+    ( 1,  1),
+    ( 1, -1),
+    (-1,  1),
+    (-1, -1),
+]
+
+searchWord = "XMAS"
+
+int matches = 0;
+for(int row = 0; row < rowCount; row++)
+{
+    for(int column = 0; column < columnCount; column++)
+    {
+        if(grid[row, column] != "X") continue;
+
+        for(direction in directions)
+        {
+            bool doesMatch = true;
+            for(int checkOffset = 1; checkOffset < searchWord.length; checkOffset)
+            {
+                if(grid[row + direction.y * checkOffset, column + direction.x * checkOffset] != searchWord[checkOffset])
+                {
+                    doesMatch = false;
+                    break;
+                }
+            }
+
+            if(doesMatch)
+            {
+                matches++;
+            }
+        }
+    }
+}
+
+print(matches)
+
+
+
+// Part 2
+
+directions = [
+    ( 1,  1),
+    ( 1, -1),
+    (-1,  1),
+    (-1, -1),
+]
+
+searchWord = "MAS"
+searchWordLengthHalf = floor(searchWord.length / 2f)
+
+int matches = 0;
+for(int row = 0; row < rowCount; row++)
+{
+    for(int column = 0; column < columnCount; column++)
+    {
+        if(grid[row, column] != "A") continue;
+
+        int matchingDirections = 0;
+        for(direction in directions)
+        {
+            bool doesMatch = true;
+            for(int checkOffset = -searchWordLengthHalf; checkOffset <= searchWordLengthHalf; checkOffset)
+            {
+                if(grid[row + direction.y * checkOffset, column + direction.x * checkOffset] != searchWord[checkOffset])
+                {
+                    doesMatch = false;
+                    break;
+                }
+            }
+
+            if(doesMatch)
+            {
+                matchingDirections++;
+            }
+        }
+
+        if(matchingDirections == 2)
+        {
+            matches++;
+        }
+    }
+}
+
+print(matches)
+
+## (topleft ^ bottomright == 0x1E) && (bottomleft ^ topright == 0x1E) // credit steve7411
