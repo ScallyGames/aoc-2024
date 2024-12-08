@@ -109,6 +109,18 @@ sendAnswer = \year, day, part, solution ->
 
     Task.ok {}
 
+
+dot := { row: I64, col: I64}, { row: I64, col: I64} -> I64
+dot = \a, b ->
+    a.row * b.row + a.col * b.col
+
+isColinear := { row: I64, col: I64}, { row: I64, col: I64} -> Bool
+isColinear = \a, b ->
+    projectedLength = dot a b
+    lengthA = dot a a
+    lengthB = dot b b
+    projectedLength * projectedLength == lengthA * lengthB
+
 main =
     year = 2024
     day = 8
@@ -218,18 +230,7 @@ part2 = \input ->
                                 col: (Num.toI64 antenna2Location.col) - (Num.toI64 index.col),
                             }
 
-                            range = List.range { start: After -50, end: Before 50 }
-
-                            hasIntegerFactor = range
-                                |> List.walkUntil Bool.false \_, factor ->
-                                    if 
-                                        distanceBetweenAntenna.row * factor == distanceToCheckSpot.row &&
-                                        distanceBetweenAntenna.col * factor == distanceToCheckSpot.col
-                                    then
-                                        Break Bool.true
-                                    else
-                                        Continue Bool.false
-                            if hasIntegerFactor then
+                            if isColinear distanceToCheckSpot distanceBetweenAntenna then
                                 Break Bool.true
                             else
                                 Continue Bool.false
