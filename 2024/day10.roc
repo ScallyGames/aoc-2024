@@ -1,5 +1,6 @@
 app [main] {
     pf: platform "https://github.com/roc-lang/basic-cli/releases/download/0.17.0/lZFLstMUCUvd5bjnnpYromZJXkQUrdhbva4xdBInicE.tar.br",
+    array2d: "https://github.com/mulias/roc-array2d/releases/download/v0.3.1/2Jqajvxn36vRryyQBSluU6Fo6vVI5yNSYmcJcyaKp0Y.tar.br",
 }
 
 import pf.Stdout
@@ -9,6 +10,9 @@ import pf.File
 import pf.Path
 import pf.Env
 import pf.Arg
+
+import array2d.Array2D exposing [Array2D]
+import array2d.Index2D exposing [Index2D]
 
 getExecutableFolder =
     args = Arg.list! {} # {} is necessary as a temporary workaround
@@ -68,6 +72,7 @@ getInput = \year, day ->
 
     padded = (leftPad (Num.toStr day) "0" 2) |> Result.withDefault ""
     filename = Str.joinWith ["input", padded, ".txt"] ""
+    # filename = Str.joinWith ["testInput", padded, ".txt"] ""
     inputPath = Str.joinWith [executableFolder, "inputs"] "/"
     filePath = Str.joinWith [inputPath, filename] "/"
 
@@ -107,7 +112,7 @@ sendAnswer = \year, day, part, solution ->
 
 main =
     year = 2024
-    day = 11
+    day = 10
 
     input = getInput! year day
 
@@ -128,92 +133,76 @@ main =
             Err _ -> Stdout.line "Something went wrong in part 2"
     part2Task!
 
-unwrap : Result a _ -> a
-unwrap = \x ->
-    when x is
-        Ok a -> a
-        Err _ -> crash "This should not ever happen"
+digitStringToNumbers : Str -> List U8
+digitStringToNumbers = \line ->
+    line
+    |> Str.toUtf8
+    |> List.map
+        (\x -> Str.fromUtf8 [x]
+            |> Result.try Str.toU8
+        )
+    |> List.keepOks \x -> x
 
-splitInHalf : StoneValue -> List StoneValue
-splitInHalf = \@StoneValue x ->
-    xAsString = Num.toStr x |> Str.toUtf8
-    midPoint = Num.divTrunc (List.len xAsString) 2
-    splitResult = List.splitAt xAsString midPoint
-    firstHalf = splitResult.before |> Str.fromUtf8 |> Result.try Str.toU64 |> unwrap
-    secondHalf = splitResult.others |> Str.fromUtf8 |> Result.try Str.toU64 |> unwrap
-    [@StoneValue firstHalf, @StoneValue secondHalf]
+getTrailEnds : Array2D U8, Index2D -> List Index2D
+getTrailEnds = \map, currentLocation ->
+    currentHeight = map |> Array2D.get currentLocation |> Result.withDefault 9
+    if currentHeight == 9 then
+        [currentLocation]
+    else
+        possibleNextLocations =
+            Index2D.allAdjacentTo currentLocation (Array2D.shape map)
+            |> List.keepIf \x -> x.row == currentLocation.row || x.col == currentLocation.col
+            |> List.keepIf \possibleLocation ->
+                heightAtLocation = Array2D.get map possibleLocation |> Result.withDefault 0
+                heightAtLocation == currentHeight + 1
 
-isOfEvenDigitSize : StoneValue -> Bool
-isOfEvenDigitSize = \@StoneValue x -> (Str.countUtf8Bytes (x |> Num.toStr)) % 2 == 0
+        possibleNextLocations |> List.joinMap \possibleLocation -> getTrailEnds map possibleLocation
 
-multiplyBy2024 : StoneValue -> StoneValue
-multiplyBy2024 = \@StoneValue x -> @StoneValue (x * 2024)
-
-StoneCount := U64 implements [Eq, Hash, Inspect]
-StoneValue := U64 implements [Eq, Hash, Inspect]
-StoneCollection : Dict StoneValue StoneCount
-
-blink : StoneCollection -> StoneCollection
-blink = \stones ->
-    stones
-    |> Dict.walk (Dict.single (@StoneValue 0) (@StoneCount 0)) \state, currentStoneValue, @StoneCount currentStoneCount ->
-        newStoneTypes =
-            if currentStoneValue == (@StoneValue 0) then
-                [@StoneValue 1]
-            else if isOfEvenDigitSize currentStoneValue then
-                splitInHalf currentStoneValue
-            else
-                [multiplyBy2024 currentStoneValue]
-        newStoneTypes
-        |> List.walk state \innerState, entry ->
-            Dict.update innerState entry \currentCount ->
-                when currentCount is
-                    Ok (@StoneCount current) -> Ok (@StoneCount (current + currentStoneCount))
-                    Err Missing -> Ok (@StoneCount currentStoneCount)
+unique : List a -> List a where a implements Hash & Eq
+unique = \list -> list |> Set.fromList |> Set.toList
 
 ## Implement your part1 and part2 solutions here
 part1 : Str -> Result Str _
 part1 = \input ->
-    initalStones =
+    inputMap =
         input
         |> Str.trim
-        |> Str.splitOn " "
-        |> List.map Str.toU64
-        |> List.keepOks \x -> x
-        |> List.walk (Dict.single (@StoneValue 0) (@StoneCount 0)) \state, initialValue ->
-            Dict.update state (@StoneValue initialValue) \currentCount ->
-                when currentCount is
-                    Ok (@StoneCount current) -> Ok (@StoneCount (current + 1))
-                    Err Missing -> Ok (@StoneCount 1)
+        |> Str.splitOn "\n"
+        |> List.map digitStringToNumbers
+        |> Array2D.fromLists (FitLongest 0)
 
-    endState =
-        List.range { start: At 0, end: Before 25 }
-        |> List.walk initalStones \stones, _ ->
-            blink stones
+    scores =
+        inputMap
+        |> Array2D.mapWithIndex \value, index ->
+            if value == 0 then
+                getTrailEnds inputMap index
+                |> unique
+                |> List.len
+            else
+                0
 
-    totalCount = endState |> Dict.values |> List.map (\@StoneCount x -> x) |> List.sum
+    totalScore = scores |> Array2D.toList |> List.sum
 
-    Ok (totalCount |> Num.toStr)
+    Ok (Num.toStr totalScore)
 
 part2 : Str -> Result Str _
 part2 = \input ->
-    initalStones =
+    inputMap =
         input
         |> Str.trim
-        |> Str.splitOn " "
-        |> List.map Str.toU64
-        |> List.keepOks \x -> x
-        |> List.walk (Dict.single (@StoneValue 0) (@StoneCount 0)) \state, initialValue ->
-            Dict.update state (@StoneValue initialValue) \currentCount ->
-                when currentCount is
-                    Ok (@StoneCount current) -> Ok (@StoneCount (current + 1))
-                    Err Missing -> Ok (@StoneCount 1)
+        |> Str.splitOn "\n"
+        |> List.map digitStringToNumbers
+        |> Array2D.fromLists (FitLongest 0)
 
-    endState =
-        List.range { start: At 0, end: Before 75 }
-        |> List.walk initalStones \stones, _ ->
-            blink stones
+    scores =
+        inputMap
+        |> Array2D.mapWithIndex \value, index ->
+            if value == 0 then
+                getTrailEnds inputMap index
+                |> List.len
+            else
+                0
 
-    totalCount = endState |> Dict.values |> List.map (\@StoneCount x -> x) |> List.sum
+    totalScore = scores |> Array2D.toList |> List.sum
 
-    Ok (totalCount |> Num.toStr)
+    Ok (Num.toStr totalScore)
