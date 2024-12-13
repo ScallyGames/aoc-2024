@@ -12,6 +12,7 @@ Solution err : {
     day : U64,
     part1 : Str -> Result Str [SomeErr]err,
     part2 : Str -> Result Str [SomeErr]err,
+    useTestInput : Bool,
 } where err implements Inspect
 
 getExecutableFolder =
@@ -67,12 +68,15 @@ fileExists = \filePath ->
         Ok val -> Task.ok val
         Err _ -> Task.ok Bool.false
 
-getInput = \year, day ->
+getInput = \year, day, useTestInput ->
     executableFolder = getExecutableFolder!
 
     padded = (leftPad (Num.toStr day) "0" 2) |> Result.withDefault ""
-    filename = Str.joinWith ["input", padded, ".txt"] ""
-    # filename = Str.joinWith ["testInput", padded, ".txt"] ""
+    filename =
+        if useTestInput then
+            Str.joinWith ["testInput", padded, ".txt"] ""
+        else
+            Str.joinWith ["input", padded, ".txt"] ""
     inputPath = Str.joinWith [executableFolder, "inputs"] "/"
     filePath = Str.joinWith [inputPath, filename] "/"
 
@@ -111,8 +115,8 @@ sendAnswer = \year, day, part, solution ->
     Task.ok {}
 
 solve : Solution err -> Task {} _
-solve = \{ year, day, part1, part2 } ->
-    input = getInput! year day
+solve = \{ year, day, part1, part2, useTestInput } ->
+    input = getInput! year day useTestInput
 
     part1Result = part1 input
     part1Task =
