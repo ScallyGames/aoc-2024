@@ -24,7 +24,7 @@ main =
         useTestInput: Bool.false,
     }
 
-MazeObject : [Wall, Robot, Box, Empty]
+MazeObject : [Wall, Robot, Box, Empty, WideBoxLeft, WideBoxRight]
 DirectionInstruction : ([SameCol, PrevCol, NextCol], [SameRow, PrevRow, NextRow])
 
 charToMazeObject : U8 -> MazeObject
@@ -36,13 +36,15 @@ charToMazeObject = \x ->
         '.' -> Empty
         _ -> crash "Unexpected character in maze setup"
 
-mazeObjectToChar : MazeObject -> U8
-mazeObjectToChar = \x ->
-    when x is
-        Robot -> '@'
-        Wall -> '#'
-        Box -> 'O'
-        Empty -> '.'
+# mazeObjectToChar : MazeObject -> U8
+# mazeObjectToChar = \x ->
+#    when x is
+#        Robot -> '@'
+#        Wall -> '#'
+#        Box -> 'O'
+#        Empty -> '.'
+#        WideBoxLeft -> '['
+#        WideBoxRight -> ']'
 
 charToDirection : U8 -> DirectionInstruction
 charToDirection = \x ->
@@ -53,53 +55,49 @@ charToDirection = \x ->
         '>' -> (NextCol, SameRow)
         _ -> crash "Unexpected direction character"
 
-invertDirection : DirectionInstruction -> DirectionInstruction
-invertDirection = \x ->
+widen : MazeObject -> List MazeObject
+widen = \x ->
     when x is
-        (SameCol, PrevRow) -> (SameCol, NextRow)
-        (SameCol, NextRow) -> (SameCol, PrevRow)
-        (PrevCol, SameRow) -> (NextCol, SameRow)
-        (NextCol, SameRow) -> (PrevCol, SameRow)
-        _ -> crash "This direction should not be needed"
-
-firstFreeLocationInDirection : Array2D MazeObject, Index2D, DirectionInstruction -> Result Index2D [FullyBlocked]
-firstFreeLocationInDirection = \maze, currentLocation, direction ->
-    when Array2D.get maze currentLocation |> AoCUtils.unwrap is
-        Empty -> Ok currentLocation
-        Wall -> Err FullyBlocked
-        _ ->
-            nextLocationCandidate = Index2D.adjacentTo currentLocation (Array2D.shape maze) direction.1 direction.0
-            nextLocationCandidate
-            |> Result.mapErr \_ -> FullyBlocked
-            |> Result.try \nextLocation ->
-                firstFreeLocationInDirection maze nextLocation direction
-
-shiftFrom : Array2D MazeObject, Index2D, DirectionInstruction -> Array2D MazeObject
-shiftFrom = \maze, currentLocation, direction ->
-    when Array2D.get maze currentLocation |> AoCUtils.unwrap is
-        Robot -> Array2D.set maze currentLocation Empty
-        Wall -> crash "Shouldn't have called shiftFrom with these arguments"
-        _ ->
-            nextIndex = Index2D.adjacentTo currentLocation (Array2D.shape maze) direction.1 direction.0 |> AoCUtils.unwrap
-            newMaze = Array2D.set maze currentLocation (Array2D.get maze nextIndex |> AoCUtils.unwrap)
-            shiftFrom newMaze nextIndex direction
-
-applyMoveInstruction : Array2D MazeObject, DirectionInstruction -> Array2D MazeObject
-applyMoveInstruction = \currentMaze, direction ->
-    robotLocation = (Array2D.findFirstIndex currentMaze \x -> x == Robot) |> AoCUtils.unwrap
-    freeTargetLocationResult = firstFreeLocationInDirection currentMaze robotLocation direction
-    when freeTargetLocationResult is
-        Ok freeTargetLocation ->
-            shiftFrom currentMaze freeTargetLocation (invertDirection direction)
-
-        Err FullyBlocked -> currentMaze
+        Robot -> [Robot, Empty]
+        Wall -> [Wall, Wall]
+        Box -> [WideBoxLeft, WideBoxRight]
+        Empty -> [Empty, Empty]
+        _ -> crash "Cannot widen this element"
 
 getGpsCoordinate : MazeObject, Index2D -> U64
 getGpsCoordinate = \content, index ->
-    if content == Box then
+    if content == Box || content == WideBoxLeft then
         index.row * 100 + index.col
     else
         0
+
+push : Array2D MazeObject, Index2D, DirectionInstruction, Bool -> Result (Array2D MazeObject) [FullyBlocked]
+push = \maze, currentLocation, direction, isAttachedCall ->
+    currentValue = Array2D.get maze currentLocation |> AoCUtils.unwrap
+    when currentValue is
+        Wall -> Err FullyBlocked
+        Empty -> Ok maze
+        _ ->
+            nextIndexCandidate =
+                Index2D.adjacentTo currentLocation (Array2D.shape maze) direction.1 direction.0
+                |> Result.mapErr \_ -> FullyBlocked
+
+            nextResult = nextIndexCandidate |> Result.try \nextIndex -> push maze nextIndex direction Bool.false
+
+            ownResult = Result.map2 nextIndexCandidate nextResult \nextIndex, newMap ->
+                Array2D.swap newMap nextIndex currentLocation
+
+            if (currentValue != WideBoxLeft && currentValue != WideBoxRight) || isAttachedCall || direction.1 == SameRow then
+                ownResult
+            else
+                offsetDirection =
+                    when currentValue is
+                        WideBoxLeft -> NextCol
+                        WideBoxRight -> PrevCol
+                        _ -> crash "This should be prevented by if before"
+
+                attachedIndex = Index2D.adjacentTo currentLocation (Array2D.shape maze) SameRow offsetDirection |> AoCUtils.unwrap
+                ownResult |> Result.try \newMap -> push newMap attachedIndex direction Bool.true
 
 # convertMazeToString : Array2D MazeObject -> Str
 # convertMazeToString = \maze ->
@@ -118,8 +116,8 @@ part1 = \input ->
         mazeSetup
         |> Str.toUtf8
         |> List.splitOn '\n'
-        |> Array2D.fromLists (FitLongest 0)
-        |> Array2D.map charToMazeObject
+        |> List.map \row -> List.map row charToMazeObject
+        |> Array2D.fromLists (FitLongest Wall)
 
     directionInstructions =
         directionInputs
@@ -129,7 +127,11 @@ part1 = \input ->
 
     mazeAfterWalking =
         directionInstructions
-        |> List.walk maze applyMoveInstruction
+        |> List.walk maze \currentMaze, direction ->
+            robotLocation = (Array2D.findFirstIndex currentMaze \x -> x == Robot) |> AoCUtils.unwrap
+            when push currentMaze robotLocation direction Bool.false is
+                Ok newMaze -> newMaze
+                Err FullyBlocked -> currentMaze
 
     result = mazeAfterWalking |> Array2D.mapWithIndex getGpsCoordinate |> Array2D.toList |> List.sum
 
@@ -137,4 +139,33 @@ part1 = \input ->
 
 part2 : Str -> Result Str _
 part2 = \input ->
-    Ok ""
+    (mazeSetup, directionInputs) =
+        input
+        |> Str.trim
+        |> Str.splitOn "\n\n"
+        |> AoCUtils.listToTuple
+
+    maze =
+        mazeSetup
+        |> Str.toUtf8
+        |> List.splitOn '\n'
+        |> List.map \row -> List.joinMap row \char -> widen (charToMazeObject char)
+        |> Array2D.fromLists (FitLongest Wall)
+
+    directionInstructions =
+        directionInputs
+        |> Str.replaceEach "\n" ""
+        |> Str.toUtf8
+        |> List.map charToDirection
+
+    mazeAfterWalking =
+        directionInstructions
+        |> List.walk maze \currentMaze, direction ->
+            robotLocation = (Array2D.findFirstIndex currentMaze \x -> x == Robot) |> AoCUtils.unwrap
+            when push currentMaze robotLocation direction Bool.false is
+                Ok newMaze -> newMaze
+                Err FullyBlocked -> currentMaze
+
+    result = mazeAfterWalking |> Array2D.mapWithIndex getGpsCoordinate |> Array2D.toList |> List.sum
+
+    Ok (result |> Num.toStr)
