@@ -1,4 +1,4 @@
-module [AoCUtils, unwrap, listToTuple, posRem, sign, groupBy]
+module [AoCUtils, unwrap, listToTuple, posRem, sign, groupBy, identity]
 
 AoCUtils : {}
 
@@ -37,3 +37,6 @@ groupBy = \list, groupingFunction ->
             when x is
                 Ok v -> Ok (List.append v a)
                 Err Missing -> Ok [a]
+
+identity : a -> a
+identity = \x -> x
