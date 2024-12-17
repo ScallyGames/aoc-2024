@@ -106,6 +106,73 @@ runProgram = \memory, instructions, instructionPointer, output ->
 
         Err _ -> output
 
+runProgramSimplified : U64, List U8 -> List U8
+runProgramSimplified = \a, output ->
+    b = (Num.bitwiseXor (Num.bitwiseAnd a 0b111) 0b010) |> Num.toU8
+    c = (Num.shiftRightZfBy a b) |> Num.toU8
+    currentOutput = Num.bitwiseAnd (Num.bitwiseXor (Num.bitwiseXor b c) 0b111) 0b111
+    nextA = Num.shiftRightZfBy a 3
+    newOutput = List.append output currentOutput
+
+    if nextA != 0 then
+        runProgramSimplified nextA newOutput
+    else
+        newOutput
+
+numberToBitString : U64 -> Str
+numberToBitString = \number ->
+    if number == 0 then
+        ""
+    else
+        currentDigit = Num.bitwiseAnd number 1 |> Num.toStr
+        Str.concat (numberToBitString (Num.shiftRightZfBy number 1)) currentDigit
+
+checkQuine : U64, List U8, List U8 -> (Bool, List U8)
+checkQuine = \a, instructions, output ->
+    if a == 0 then
+        if (instructions == output) then
+            (Bool.true, output)
+        else
+            (Bool.false, [])
+    else
+        b = (Num.bitwiseXor (Num.bitwiseAnd a 0b111) 0b010) |> Num.toU8
+        c = (Num.shiftRightZfBy a b) |> Num.toU8
+        currentOutput = Num.bitwiseAnd (Num.bitwiseXor (Num.bitwiseXor b c) 0b111) 0b111
+
+        nextA = Num.shiftRightZfBy a 3
+        newOutput = List.append output currentOutput
+
+        checkQuine nextA instructions newOutput
+
+findValidInitializerValueV2 : List U8, U64, List U64 -> U64
+findValidInitializerValueV2 = \instructions, currentLength, valuesToCheck ->
+    validSubsetInitializers =
+        valuesToCheck
+        |> List.keepIf \initializerValue ->
+            currentInstructionSubset = List.dropFirst instructions (List.len instructions - currentLength)
+            isQuine = checkQuine initializerValue currentInstructionSubset []
+            isQuine.0
+
+    if currentLength == (List.len instructions) then
+        validSubsetInitializers |> List.first |> AoCUtils.unwrap
+    else
+        newValuesToCheck =
+            validSubsetInitializers
+            |> List.joinMap \x ->
+                base = Num.shiftLeftBy x 3
+                [
+                    base + 0,
+                    base + 1,
+                    base + 2,
+                    base + 3,
+                    base + 4,
+                    base + 5,
+                    base + 6,
+                    base + 7,
+                ]
+
+        findValidInitializerValueV2 instructions (currentLength + 1) newValuesToCheck
+
 ## Implement your part1 and part2 solutions here
 part1 : Str -> Result Str _
 part1 = \input ->
@@ -117,4 +184,8 @@ part1 = \input ->
 
 part2 : Str -> Result Str _
 part2 = \input ->
-    Ok ""
+    (_, instructions) = parseProgram input
+
+    initializerValue = findValidInitializerValueV2 instructions 1 (List.range { start: At 0, end: At (Num.powInt 2 10) })
+
+    Ok (initializerValue |> Num.toStr)
