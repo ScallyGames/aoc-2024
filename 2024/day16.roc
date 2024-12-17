@@ -37,6 +37,14 @@ charToMazeContent = \x ->
         'E' -> End
         _ -> crash "Unexpected char in input"
 
+mazeContentToChar : MazeContent -> U8
+mazeContentToChar = \x ->
+    when x is
+        Wall -> '#'
+        Empty -> '.'
+        Start -> 'S'
+        End -> 'E'
+
 directionTupleToDirection = \direction ->
     when direction is
         (SameCol, PrevRow) -> Up
@@ -75,8 +83,28 @@ rotateRight = \currentLocation, currentDirection, _ ->
         Down -> Ok (currentLocation, Left)
         Left -> Ok (currentLocation, Up)
 
+fastAnd : ({} -> Bool), ({} -> Bool) -> Bool
+fastAnd = \a, b ->
+    if !(a {}) then
+        Bool.false
+    else if !(b {}) then
+        Bool.false
+    else
+        Bool.true
+
+mazeWithPathToString : Array2D MazeContent, Set Index2D -> Str
+mazeWithPathToString = \maze, path ->
+    dbgOutputInitial =
+        maze
+        |> Array2D.map mazeContentToChar
+
+    dbgOutput = Set.walk path dbgOutputInitial \state, index ->
+        Array2D.set state index 'O'
+
+    ((dbgOutput |> Array2D.toLists |> List.map \x -> Str.fromUtf8 x |> AoCUtils.unwrap) |> Str.joinWith "\n")
+
 # basically a recursive implementation of a BFS that unwraps the while loop and priority queue into a recursive function call
-getLowestCostToGoal : Array2D MazeContent, List (Index2D, Direction, U64), Set (Index2D, Direction) -> Result U64 [NoPathFound]
+getLowestCostToGoal : Array2D MazeContent, List (Index2D, Direction, U64, Set Index2D), Set (Index2D, Direction) -> Result (U64, Set Index2D) [NoPathFound]
 getLowestCostToGoal = \maze, open, visited ->
     if List.len open == 0 then
         Err NoPathFound
@@ -86,9 +114,25 @@ getLowestCostToGoal = \maze, open, visited ->
         remainingOpen = List.dropIf open \x -> x == currentState
 
         if Array2D.get maze currentState.0 |> AoCUtils.unwrap == End then
-            Ok currentState.2
+            allVisitedNodes =
+                remainingOpen
+                |> List.append currentState
+                |> List.walk (Set.empty {}) \visitedNodes, openNode ->
+                    if openNode.0 == currentState.0 && openNode.2 == currentState.2 then
+                        Set.union visitedNodes openNode.3
+                    else
+                        visitedNodes
+            Ok (currentState.2, allVisitedNodes |> Set.insert currentState.0)
         else if Set.contains visited (currentState.0, currentState.1) then
+            # we've been here but add the possible paths alternatives
             getLowestCostToGoal maze remainingOpen visited
+        else if List.any remainingOpen \elementInOpenList -> elementInOpenList.0 == currentState.0 && elementInOpenList.1 == currentState.1 && elementInOpenList.2 == currentState.2 then
+            updatedOpenList = List.map remainingOpen \elementInOpenList ->
+                if elementInOpenList.0 == currentState.0 && elementInOpenList.1 == currentState.1 && elementInOpenList.2 == currentState.2 then
+                    (elementInOpenList.0, elementInOpenList.1, elementInOpenList.2, Set.union elementInOpenList.3 currentState.3)
+                else
+                    elementInOpenList
+            getLowestCostToGoal maze updatedOpenList visited
         else
             possibleActions = [
                 (moveStraight, 1),
@@ -104,7 +148,7 @@ getLowestCostToGoal = \maze, open, visited ->
 
             newOpen =
                 validActions
-                |> List.map \(nextLocation, nextDirection, nextCost) -> (nextLocation, nextDirection, currentState.2 + nextCost)
+                |> List.map \(nextLocation, nextDirection, nextCost) -> (nextLocation, nextDirection, currentState.2 + nextCost, Set.insert currentState.3 currentState.0)
                 |> List.concat remainingOpen
 
             getLowestCostToGoal maze newOpen (Set.insert visited (currentState.0, currentState.1))
@@ -122,10 +166,22 @@ part1 = \input ->
 
     startLocation = (Array2D.findFirstIndex maze \x -> x == Start) |> AoCUtils.unwrap
 
-    lowestCost = getLowestCostToGoal maze [(startLocation, Right, 0)] (Set.empty {})
+    lowestCost = getLowestCostToGoal maze [(startLocation, Right, 0, Set.empty {})] (Set.empty {}) |> AoCUtils.unwrap
 
-    lowestCost |> Result.map \x -> Num.toStr x
+    Ok (Num.toStr lowestCost.0)
 
 part2 : Str -> Result Str _
 part2 = \input ->
-    Ok ""
+    maze =
+        input
+        |> Str.trim
+        |> Str.toUtf8
+        |> List.splitOn '\n'
+        |> Array2D.fromLists (FitLongest 0)
+        |> Array2D.map charToMazeContent
+
+    startLocation = (Array2D.findFirstIndex maze \x -> x == Start) |> AoCUtils.unwrap
+
+    lowestCost = getLowestCostToGoal maze [(startLocation, Right, 0, Set.empty {})] (Set.empty {}) |> AoCUtils.unwrap
+
+    Ok (Num.toStr (Set.len lowestCost.1))
