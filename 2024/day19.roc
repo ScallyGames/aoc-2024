@@ -47,6 +47,29 @@ getTowelCombination = \pattern, towels ->
 
     getTowelCombinationRecursive pattern
 
+getTowelCombinationCount : Pattern, List Towel -> U64
+getTowelCombinationCount = \pattern, towels ->
+    dbg pattern
+    getValidCandidates : Pattern -> List Towel
+    getValidCandidates = \nextPattern ->
+        towels
+        |> List.keepIf \towel ->
+            numberOfStripes = List.len towel
+            towel == List.sublist nextPattern { start: 0, len: numberOfStripes }
+
+    getTowelCombinationCountRecursive : Pattern -> U64
+    getTowelCombinationCountRecursive = \remainingPattern ->
+        if List.len remainingPattern == 0 then
+            1
+        else
+            possibleCandidates = getValidCandidates remainingPattern
+            possibleCandidates
+            |> List.walk 0 \state, next ->
+                recursiveResult = getTowelCombinationCountRecursive (remainingPattern |> List.dropFirst (List.len next))
+                state + recursiveResult
+
+    getTowelCombinationCountRecursive pattern
+
 ## Implement your part1 and part2 solutions here
 part1 : Str -> Result Str _
 part1 = \input ->
@@ -69,4 +92,18 @@ part1 = \input ->
 
 part2 : Str -> Result Str _
 part2 = \input ->
-    Ok ""
+    (towelString, patternsInput) =
+        input
+        |> Str.trim
+        |> Str.splitOn "\n\n"
+        |> AoCUtils.listToTuple
+
+    towelOptions = towelString |> Str.splitOn "," |> List.map Str.trim |> List.map Str.toUtf8
+
+    patterns = patternsInput |> Str.toUtf8 |> List.splitOn '\n'
+
+    possibleDesigns =
+        patterns
+        |> List.map \x -> getTowelCombinationCount x towelOptions
+
+    Ok (possibleDesigns |> List.sum |> Num.toStr)
